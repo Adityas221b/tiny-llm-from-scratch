@@ -4,13 +4,15 @@ A small decoder-only language model built from scratch in PyTorch. It includes a
 
 It trains on a laptop GPU in about 4 minutes. Two corpora are supported:
 
+<!-- BEGIN:headline -->
 | corpus | model | held-out perplexity | bits / char | train time |
 |---|---|---|---|---|
 | **Jeeves & Wooster** (P.G. Wodehouse, 1.46M chars) | **GPT-2 + RoPE**, 4.87M params | **12.37** | **1.78** | 3.3 min |
 | Jeeves & Wooster | full Llama preset (RoPE + RMSNorm + SwiGLU), 4.88M params | 12.89 | 1.81 | 3.8 min |
 | TinyShakespeare (1.1M chars) | GPT-2-style, 4.94M params | 16.58 | 2.16 | 4.6 min |
+<!-- END:headline -->
 
-Every number in this README is measured. Raw logs, histories and evaluation JSON are in [`runs/`](runs/). Compare rows only within the same corpus. The headline Jeeves model uses GPT-2 + RoPE because that combination won the [architecture ablation](#architecture-ablation-gpt-2--llama-one-switch-at-a-time) below. Retrained on Jeeves, it also beats the full Llama preset there (single seed each, 2000 iterations).
+Every number in this README is measured. Raw logs, histories and evaluation JSON are in [`runs/`](runs/), and every results table is generated from those files by [`make_report.py`](make_report.py). A test fails if a table drifts from the data. Compare rows only within the same corpus. The headline Jeeves model uses GPT-2 + RoPE because that combination won the [architecture ablation](#architecture-ablation-gpt-2--llama-one-switch-at-a-time) below. Retrained on Jeeves, it also beats the full Llama preset there (single seed each, 2000 iterations).
 
 ## It talks like Bertie Wooster
 
@@ -118,14 +120,16 @@ Induction heads are attention heads that let a transformer copy from its context
 
 Results for the Llama-preset Jeeves model, the one trained with snapshots (from [`runs/jeeves_interpretability.json`](runs/jeeves_interpretability.json)):
 
+<!-- BEGIN:interpretability -->
 | measurement | value |
 |---|---|
-| max previous-token score | 0.03 at iteration 0, **0.56 at iteration 200**, then flat around 0.54 |
-| max induction score | **≤ 0.009 at every snapshot** (chance is about 0.007) |
+| max previous-token score | 0.025 at iteration 0 → **0.556 by iteration 200** (peak 0.557 at 700), 0.535 at iteration 2000 |
+| max induction score | **≤ 0.008 at every snapshot** (chance ≈ 0.007) |
 | loss on repeated random tokens, first half → second half | 11.58 → 11.96 (no gain from having seen the sequence) |
 | loss on a repeated natural Jeeves passage, first → second | 2.63 → 2.71 (no gain) |
 | repeated-half loss: clean / top-3 "induction" heads off / 3 random heads off | 11.96 / 11.94 / 12.01 |
 | val loss: clean / top-3 heads off / 3 random heads off | 2.556 / 2.558 / 2.564 |
+<!-- END:interpretability -->
 
 So **half of the induction circuit forms and half doesn't.** Previous-token heads appear within the first 200 steps, mainly in layers 4 and 5. The second step, attending to "the token after my earlier occurrence", never appears within this budget of about 33M training tokens. The causal test agrees: switching off the highest-scoring candidate heads hurts no more than switching off random heads. That fits the published finding that induction heads form in a later phase change than this run reaches.
 
@@ -137,12 +141,14 @@ One methodology note: random tokens are drawn only from tokens that occur at lea
 
 Measured with `bench_generate.py` on the Llama-preset Jeeves model: batch size 1, top-k sampling, the mean of 3 runs after a warm-up.
 
+<!-- BEGIN:kv_cache -->
 | device | tokens generated | no cache | KV cache | speedup |
 |---|---|---|---|---|
 | CPU | 240 | 69.9 tok/s | 173.6 tok/s | 2.5× |
 | CPU | 1000 | 47.3 tok/s | 175.7 tok/s | **3.7×** |
-| GPU (RTX 5050 laptop) | 240 | 70.9 tok/s | 109.8 tok/s | 1.5× |
+| GPU (RTX 5050 laptop) | 240 | 70.9 tok/s | 109.8 tok/s | 1.6× |
 | GPU (RTX 5050 laptop) | 1000 | 92.6 tok/s | 105.3 tok/s | 1.1× |
+<!-- END:kv_cache -->
 
 Without a cache, each new token re-runs the model over the whole context, so the cost per token grows as the context fills. With the cache, the cost per token stays flat. On the GPU the gain is small because at batch size 1 a 5M-parameter model is limited by per-step overhead, not by computation. That's why the CPU with a cache beats the GPU here.
 
@@ -150,12 +156,14 @@ Without a cache, each new token re-runs the model over the whole context, so the
 
 `ablate.py` trains four variants on TinyShakespeare with three seeds each, using identical data, tokenizer, model size, optimizer and 1500-step budget. It scores each best checkpoint on the full validation split. That's 12 runs, about 30 minutes on the laptop GPU.
 
+<!-- BEGIN:ablation -->
 | variant | val loss (mean ± std, 3 seeds) | val ppl | bits/char | Δ vs gpt2 | best iter (mean) | train time |
 |---|---|---|---|---|---|---|
 | gpt2 (learned pos, LayerNorm, GELU) | 2.793 ± 0.010 | 16.34 | 2.146 | — | 1433 | 2.0 min |
 | **gpt2 + RoPE** | **2.681 ± 0.012** | **14.59** | **2.059** | **−0.113** | 1267 | 2.5 min |
 | gpt2 + RMSNorm + SwiGLU | 2.808 ± 0.013 | 16.58 | 2.157 | +0.015 | 1267 | 2.6 min |
 | llama (RoPE, RMSNorm, SwiGLU, no biases) | 2.736 ± 0.011 | 15.43 | 2.102 | −0.057 | 1200 | 2.9 min |
+<!-- END:ablation -->
 
 ![ablation](assets/ablation.png)
 
@@ -194,7 +202,7 @@ An earlier 5000-iteration run (right panel) overfit badly. Validation loss botto
 ```bash
 python -m venv .venv && .venv\Scripts\activate       # Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt                       # for CUDA, install torch from pytorch.org first
-python -m pytest                                      # 34 tests, about 6 s on CPU
+python -m pytest                                      # 36 tests, about 6 s on CPU
 
 python prepare_data.py --corpus jeeves                # or --corpus shakespeare (default)
 python train.py --data_dir data/jeeves --out_dir out/jeeves_rope --arch gpt2 --pos_emb rope --max_iters 2000
@@ -208,6 +216,7 @@ python interpret.py --ckpt out/jeeves/ckpt.pt --data_dir data/jeeves \
     --snapshots out/jeeves/snapshots --history out/jeeves/history.json
 python bench_generate.py --ckpt out/jeeves/ckpt.pt
 python ablate.py --seeds 1 2 3
+python make_report.py                                 # rebuild README results tables from runs/
 ```
 
 `train.py` flags:
@@ -218,7 +227,7 @@ The defaults are 6 layers, 8 heads, d = 256, a 256-token context, batch size 64,
 
 ## Tests
 
-The 34 tests in `tests/` run every combination of architecture (gpt2, llama) and attention path (manual, SDPA) where it matters:
+The 36 tests in `tests/` run every combination of architecture (gpt2, llama) and attention path (manual, SDPA) where it matters:
 - **Causality:** changing token *t* leaves the logits before *t* exactly unchanged, and the gradient from output *t* to any later input is exactly zero.
 - **KV cache:** prefill plus one-token decode steps gives the same logits as a full forward pass, and cached greedy generation produces exactly the same tokens as uncached generation.
 - **Components:**
@@ -228,6 +237,7 @@ The 34 tests in `tests/` run every combination of architecture (gpt2, llama) and
   - Switching off every head zeroes the attention output.
   - Recorded attention maps are causal and each row sums to 1.
 - **Tokenizer:** lossless round-trips on training text, unseen text, whitespace edge cases and Unicode (emoji, CJK), and identical encodings after save and load.
+- **Report:** every README results table equals what `make_report.py` derives from `runs/`.
 - **Sanity:**
   - The initial loss is close to ln(vocab).
   - Weights are tied.
@@ -256,6 +266,7 @@ interpret.py           induction / previous-token scores, head ablation, trainin
 bench_generate.py      tokens/s with and without the KV cache
 ablate.py              multi-seed architecture ablation
 plot_loss.py           loss-curve figures
+make_report.py         regenerates README results tables from runs/ (--check for CI)
 tests/                 pytest suite
 runs/                  logs, histories, eval / interpretability / benchmark JSON
 ```
