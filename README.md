@@ -138,10 +138,25 @@ Without a cache, each new token re-runs the model over the whole context, so the
 
 ## Architecture ablation (GPT-2 → Llama, one switch at a time)
 
-`ablate.py` trains four variants on TinyShakespeare with three seeds each, using identical data, model size, optimizer and 1500-step budget, and scores every best checkpoint on the full validation split. **This run is still in progress; the results table will be added here when it finishes.**
+`ablate.py` trains four variants on TinyShakespeare with three seeds each, using identical data, tokenizer, model size, optimizer and 1500-step budget. It scores each best checkpoint on the full validation split. That's 12 runs, about 30 minutes on the laptop GPU.
+
+| variant | val loss (mean ± std, 3 seeds) | val ppl | bits/char | Δ vs gpt2 | best iter (mean) | train time |
+|---|---|---|---|---|---|---|
+| gpt2 (learned pos, LayerNorm, GELU) | 2.793 ± 0.010 | 16.34 | 2.146 | — | 1433 | 2.0 min |
+| **gpt2 + RoPE** | **2.681 ± 0.012** | **14.59** | **2.059** | **−0.113** | 1267 | 2.5 min |
+| gpt2 + RMSNorm + SwiGLU | 2.808 ± 0.013 | 16.58 | 2.157 | +0.015 | 1267 | 2.6 min |
+| llama (RoPE, RMSNorm, SwiGLU, no biases) | 2.736 ± 0.011 | 15.43 | 2.102 | −0.057 | 1200 | 2.9 min |
+
+![ablation](assets/ablation.png)
+
+What the numbers say. The seed-to-seed std is about 0.01, so the standard error of a difference between two means is about 0.01.
+- **RoPE alone gives the whole gain:** −0.113 nats/token, about 11 standard errors, with every seed better than every baseline seed. A small model with 256-token contexts gets a lot from relative-position attention built into q·k, compared with learning 256 absolute position vectors from 0.5M tokens.
+- **RMSNorm + SwiGLU alone doesn't help at this scale.** The +0.015 is about 1.6 standard errors, so it's within noise.
+- **Adding them on top of RoPE gives back about half the gain** (2.736 vs 2.681, about 5 standard errors). The curves show why: the full Llama variant learns fastest (it has the lowest validation loss until about iteration 600), then plateaus and starts to overfit, with its best checkpoint earliest (iteration 1200). The RoPE-only variant keeps improving to the end. On a dataset this small, the extra components speed up fitting and overfitting alike.
+- **Caveats:** this is one small dataset and a 1500-step budget. The hyperparameters (learning rate 1e-3, dropout 0.25) were tuned on the GPT-2 baseline, and the Llama preset also drops biases. Llama-style components are designed for much larger scales, so this result says "not at 5M parameters and 0.5M tokens", not "never". The Jeeves model above uses the full Llama preset; based on this table, `--arch gpt2 --pos_emb rope` is the stronger choice at this scale.
 
 ```bash
-python ablate.py --seeds 1 2 3     # writes runs/ablation/summary.md and assets/ablation.png
+python ablate.py --seeds 1 2 3     # writes runs/ablation/summary.{json,md} and assets/ablation.png
 ```
 
 ## TinyShakespeare baseline (GPT-2 style)
@@ -211,6 +226,7 @@ The 34 tests in `tests/` run every combination of architecture (gpt2, llama) and
 
 - **Mechanistic claims need controls.** My first induction probe sampled byte tokens the model had never seen, so the loss was about 15 nats and the "scores" were meaningless. A pinned token pool, a natural-text probe and a random-head ablation control turned it into a clean (and honest) negative result: previous-token heads form, induction heads don't yet.
 - **Caching has subtle edge cases, so pin them with tests.** `is_causal=True` in SDPA lines the mask up from the top-left corner, which is wrong when a single new query attends over cached keys. The decode step therefore runs unmasked, and the KV-cache equivalence tests (cached logits must equal full-forward logits for every architecture and attention combination) guard against regressions. Separately, a naive initial-loss test failed for the Llama preset. With tied embeddings and no position vector added to the residual stream, an untrained model already predicts "the same token as the input" better than chance. That was a flaw in the test (targets equal to inputs), not in the model.
+- **"Modern" isn't automatically better: measure it.** In a 3-seed ablation, RoPE alone beat the full Llama recipe (−0.113 vs −0.057 nats), because RMSNorm + SwiGLU made the model fit, and then overfit, a 0.5M-token corpus faster. Without seeds and error bars, a single lucky run could have suggested either conclusion.
 - **Watch the overfitting curve.** On 0.5M tokens, training longer made the Shakespeare model worse. Ending the learning-rate schedule near the validation minimum matters more than the number of steps.
 - **Know which resource limits you.** bf16 gave about 2.4× faster training. The KV cache gave 3.7× faster generation on CPU but only about 1.1× on GPU, because tiny models at batch size 1 are limited by per-step overhead.
 

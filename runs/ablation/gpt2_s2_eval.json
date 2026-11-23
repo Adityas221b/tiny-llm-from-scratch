@@ -1,0 +1,9 @@
+{
+ "split": "val",
+ "checkpoint_iter": 1500,
+ "tokens": 59392,
+ "chars": 111528,
+ "loss_nats_per_token": 2.790011669027394,
+ "perplexity": 16.281209786562965,
+ "bits_per_char": 2.1435054627388763
+}
