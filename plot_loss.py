@@ -24,6 +24,7 @@ def main() -> None:
     ap.add_argument("--history", default="out/history.json")
     ap.add_argument("--compare", default=None, help="optional second run (e.g. the overfitting run)")
     ap.add_argument("--out", default="assets/loss_curve.png")
+    ap.add_argument("--title", default="tiny-llm-from-scratch: TinyShakespeare, byte-level BPE (vocab 512), 4.9M params")
     a = ap.parse_args()
 
     h = load(a.history)
@@ -56,7 +57,7 @@ def main() -> None:
         ax.grid(alpha=0.3)
         ax.legend(frameon=False)
 
-    fig.suptitle("tiny-llm-from-scratch: TinyShakespeare, byte-level BPE (vocab 512), 4.9M params", fontsize=10)
+    fig.suptitle(a.title, fontsize=10)
     fig.tight_layout()
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     fig.savefig(a.out)

@@ -1,0 +1,23 @@
+device=cuda | dtype=bf16-autocast | arch=rope/rmsnorm/swiglu | params=4,877,568 | train tokens=635,282 val tokens=71,374
+[eval] iter     0 | train 6.2513 | val 6.2467 | val ppl 516.33 | 3s
+[eval] iter   100 | train 3.5381 | val 3.6025 | val ppl 36.69 | 14s
+[eval] iter   200 | train 2.7759 | val 2.9604 | val ppl 19.31 | 25s
+[eval] iter   300 | train 2.4873 | val 2.7518 | val ppl 15.67 | 36s
+[eval] iter   400 | train 2.3363 | val 2.6823 | val ppl 14.62 | 48s
+[eval] iter   500 | train 2.2197 | val 2.6257 | val ppl 13.81 | 59s
+[eval] iter   600 | train 2.1380 | val 2.5929 | val ppl 13.37 | 70s
+[eval] iter   700 | train 2.0530 | val 2.5738 | val ppl 13.12 | 82s
+[eval] iter   800 | train 1.9887 | val 2.5599 | val ppl 12.93 | 93s
+[eval] iter   900 | train 1.9209 | val 2.5545 | val ppl 12.86 | 104s
+[eval] iter  1000 | train 1.8705 | val 2.5619 | val ppl 12.96 | 116s
+[eval] iter  1100 | train 1.8139 | val 2.5515 | val ppl 12.83 | 127s
+[eval] iter  1200 | train 1.7656 | val 2.5514 | val ppl 12.82 | 138s
+[eval] iter  1300 | train 1.7206 | val 2.5622 | val ppl 12.96 | 150s
+[eval] iter  1400 | train 1.6721 | val 2.5477 | val ppl 12.78 | 161s
+[eval] iter  1500 | train 1.6449 | val 2.5673 | val ppl 13.03 | 173s
+[eval] iter  1600 | train 1.6130 | val 2.5574 | val ppl 12.90 | 184s
+[eval] iter  1700 | train 1.5840 | val 2.5694 | val ppl 13.06 | 195s
+[eval] iter  1800 | train 1.5793 | val 2.5677 | val ppl 13.04 | 207s
+[eval] iter  1900 | train 1.5575 | val 2.5820 | val ppl 13.22 | 218s
+[eval] iter  2000 | train 1.5442 | val 2.5769 | val ppl 13.16 | 230s
+done in 3.8 min | best val loss 2.5477 (ppl 12.78)

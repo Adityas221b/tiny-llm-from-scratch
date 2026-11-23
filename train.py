@@ -30,6 +30,15 @@ def get_args():
     ap.add_argument("--dropout", type=float, default=0.25)
     ap.add_argument("--attn", default="sdpa", choices=["sdpa", "manual"],
                     help="sdpa = fused attention kernel, manual = explicit masked softmax")
+    ap.add_argument("--arch", default="llama", choices=["gpt2", "llama"],
+                    help="preset: gpt2 = learned pos + LayerNorm + GELU; llama = RoPE + RMSNorm + SwiGLU")
+    ap.add_argument("--pos_emb", choices=["learned", "rope"], help="override the preset")
+    ap.add_argument("--norm", choices=["layernorm", "rmsnorm"], help="override the preset")
+    ap.add_argument("--mlp", choices=["gelu", "swiglu"], help="override the preset")
+    ap.add_argument("--dtype", default="auto", choices=["auto", "fp32", "bf16"],
+                    help="auto = bf16 autocast on CUDA, fp32 on CPU")
+    ap.add_argument("--save_every", type=int, default=0,
+                    help="if > 0, also save snapshots/ckpt_<iter>.pt every N iters (for training-dynamics analysis)")
     # optimisation
     ap.add_argument("--batch_size", type=int, default=64)
     ap.add_argument("--max_iters", type=int, default=1500)
@@ -71,12 +80,19 @@ def main() -> None:
         y = torch.from_numpy(np.stack([d[i + 1:i + 1 + a.block_size] for i in ix]).astype(np.int64))
         return x.to(device), y.to(device)
 
-    cfg = GPTConfig(vocab_size=vocab_size, block_size=a.block_size, n_layer=a.n_layer,
-                    n_head=a.n_head, n_embd=a.n_embd, dropout=a.dropout, use_sdpa=a.attn == "sdpa")
+    overrides = {k: getattr(a, k) for k in ("pos_emb", "norm", "mlp") if getattr(a, k) is not None}
+    cfg = GPTConfig.preset(a.arch, vocab_size=vocab_size, block_size=a.block_size, n_layer=a.n_layer,
+                           n_head=a.n_head, n_embd=a.n_embd, dropout=a.dropout,
+                           use_sdpa=a.attn == "sdpa", **overrides)
     model = GPT(cfg).to(device)
     opt = model.configure_optimizer(a.lr, a.weight_decay)
-    print(f"device={device} | params={model.num_params(non_embedding=False):,} | "
+    use_bf16 = (a.dtype == "bf16") or (a.dtype == "auto" and device == "cuda")
+    autocast = torch.autocast(device_type=device, dtype=torch.bfloat16, enabled=use_bf16)
+    print(f"device={device} | dtype={'bf16-autocast' if use_bf16 else 'fp32'} | "
+          f"arch={cfg.pos_emb}/{cfg.norm}/{cfg.mlp} | params={model.num_params(non_embedding=False):,} | "
           f"train tokens={len(data['train']):,} val tokens={len(data['val']):,}")
+    if a.save_every:
+        os.makedirs(os.path.join(a.out_dir, "snapshots"), exist_ok=True)
 
     @torch.no_grad()
     def estimate_loss():
@@ -86,7 +102,8 @@ def main() -> None:
             losses = torch.zeros(a.eval_iters)
             for k in range(a.eval_iters):
                 x, y = get_batch(split)
-                losses[k] = model(x, y)[1].item()
+                with autocast:
+                    losses[k] = model(x, y)[1].item()
             out[split] = losses.mean().item()
         model.train()
         return out
@@ -108,11 +125,15 @@ def main() -> None:
                 best_val = l["val"]
                 torch.save({"model": model.state_dict(), "config": asdict(cfg), "iter": it, "val_loss": best_val},
                            os.path.join(a.out_dir, "ckpt.pt"))
-            if it == a.max_iters:
-                break
+        if a.save_every and (it % a.save_every == 0 or it == a.max_iters):
+            torch.save({"model": model.state_dict(), "config": asdict(cfg), "iter": it},
+                       os.path.join(a.out_dir, "snapshots", f"ckpt_{it:05d}.pt"))
+        if it == a.max_iters:
+            break
 
         x, y = get_batch("train")
-        _, loss = model(x, y)
+        with autocast:
+            _, loss = model(x, y)
         opt.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), a.grad_clip)

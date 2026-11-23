@@ -17,3 +17,4 @@ out_train_log.txt
 Thumbs.db
 .vscode/
 .idea/
+ablation_ckpts/
