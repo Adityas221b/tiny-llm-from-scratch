@@ -1,0 +1,23 @@
+device=cuda | params=4,935,680 | train tokens=516,405 val tokens=59,401
+[eval] iter     0 | train 6.2706 | val 6.2659 | val ppl 526.32 | 5s
+[eval] iter   250 | train 3.4064 | val 3.5684 | val ppl 35.46 | 43s
+[eval] iter   500 | train 2.8086 | val 3.1174 | val ppl 22.59 | 81s
+[eval] iter   750 | train 2.4532 | val 2.9073 | val ppl 18.31 | 119s
+[eval] iter  1000 | train 2.2606 | val 2.8029 | val ppl 16.49 | 157s
+[eval] iter  1250 | train 2.0900 | val 2.8026 | val ppl 16.49 | 195s
+[eval] iter  1500 | train 1.9614 | val 2.8067 | val ppl 16.55 | 233s
+[eval] iter  1750 | train 1.8281 | val 2.8387 | val ppl 17.09 | 271s
+[eval] iter  2000 | train 1.7181 | val 2.8927 | val ppl 18.04 | 309s
+[eval] iter  2250 | train 1.6030 | val 2.9157 | val ppl 18.46 | 347s
+[eval] iter  2500 | train 1.4930 | val 2.9729 | val ppl 19.55 | 385s
+[eval] iter  2750 | train 1.3925 | val 3.0019 | val ppl 20.12 | 423s
+[eval] iter  3000 | train 1.3099 | val 3.0726 | val ppl 21.60 | 462s
+[eval] iter  3250 | train 1.2252 | val 3.0986 | val ppl 22.17 | 500s
+[eval] iter  3500 | train 1.1483 | val 3.1574 | val ppl 23.51 | 538s
+[eval] iter  3750 | train 1.0935 | val 3.2089 | val ppl 24.75 | 576s
+[eval] iter  4000 | train 1.0392 | val 3.2278 | val ppl 25.22 | 614s
+[eval] iter  4250 | train 0.9866 | val 3.2565 | val ppl 25.96 | 652s
+[eval] iter  4500 | train 0.9621 | val 3.2841 | val ppl 26.69 | 691s
+[eval] iter  4750 | train 0.9313 | val 3.2903 | val ppl 26.85 | 729s
+[eval] iter  5000 | train 0.9190 | val 3.3003 | val ppl 27.12 | 767s
+done in 12.8 min | best val loss 2.8026 (ppl 16.49)

@@ -1,0 +1,9 @@
+{
+ "split": "train",
+ "checkpoint_iter": 1300,
+ "tokens": 516352,
+ "chars": 1003755,
+ "loss_nats_per_token": 2.2484364448116154,
+ "perplexity": 9.472912829080357,
+ "bits_per_char": 1.6686809077265476
+}

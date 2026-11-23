@@ -1,0 +1,19 @@
+# environments
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# data and checkpoints (regenerate with prepare_data.py / train.py)
+data/
+out/
+*.pt
+*.bin
+out_train_log.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
