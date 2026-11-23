@@ -6,54 +6,64 @@ It trains on a laptop GPU in about 4 minutes. Two corpora are supported:
 
 | corpus | model | held-out perplexity | bits / char | train time |
 |---|---|---|---|---|
-| **Jeeves & Wooster** (P.G. Wodehouse, 1.46M chars) | Llama-style, 4.88M params | **12.89** | **1.81** | 3.8 min |
+| **Jeeves & Wooster** (P.G. Wodehouse, 1.46M chars) | **GPT-2 + RoPE**, 4.87M params | **12.37** | **1.78** | 3.3 min |
+| Jeeves & Wooster | full Llama preset (RoPE + RMSNorm + SwiGLU), 4.88M params | 12.89 | 1.81 | 3.8 min |
 | TinyShakespeare (1.1M chars) | GPT-2-style, 4.94M params | 16.58 | 2.16 | 4.6 min |
 
-Every number in this README is measured. Raw logs, histories and evaluation JSON are in [`runs/`](runs/). The two rows use different text, so compare within a row, not across rows.
+Every number in this README is measured. Raw logs, histories and evaluation JSON are in [`runs/`](runs/). Compare rows only within the same corpus. The headline Jeeves model uses GPT-2 + RoPE because that combination won the [architecture ablation](#architecture-ablation-gpt-2--llama-one-switch-at-a-time) below. Retrained on Jeeves, it also beats the full Llama preset there (single seed each, 2000 iterations).
 
 ## It talks like Bertie Wooster
 
-Real output from `sample.py` (temperature 0.8, top-k 40, seeds 1–4, not cherry-picked; all four are in [`runs/jeeves_samples.txt`](runs/jeeves_samples.txt)):
+Real output from the GPT-2 + RoPE model via `sample.py` (temperature 0.8, top-k 40, seeds 1–4, not cherry-picked). All four samples are in [`runs/jeeves_gpt2rope_samples.txt`](runs/jeeves_gpt2rope_samples.txt), and the Llama-preset model's samples are in [`runs/jeeves_samples.txt`](runs/jeeves_samples.txt).
 
-```
-"Jeeves," I said, "it would be a bit of a chappie whose words I will
-paint there?"
-
-"I hope they are. How are you doing anything?"
-
-Jeeves started giving me the chappie out of my shock.
-
-"Sir?"
-
-"Nothing like that."
-
-"Oh, all right, then. You mustn't want to make an impression. I mean,
-Bingo isn't very bally awful dozen.
-```
-```
-Aunt Agatha had ready for the proceedings I had never heard of
-the first day, and then the Glossop came away from the back.
-
-"What ho!"
-
-"I didn't do anything that. They must be allowed in a way."
-```
 ```
 "Very good, sir."
 
-"Well, by Jove, what I mean is, I think that particularly against the
-thing that was the longest fashional failed to be pretty brainy.
+"Well, Jeeves, what would you like?"
 
-"Do you mean to say, sir?"
+"I fancy Mr. Corcoran advantage at some time, sir."
+
+"Nevertheless, I suppose, Jeeves."
+
+"I happened to admit that, sir."
+
+"Jeeves, I should be glad to hear that the luncheon will endeavour to
+be some way to come here."
+
+"I am sorry to roll up with you, sir."
+```
+```
+"Jeeves," I said, "it is not, sir."
+
+He visited himself; and what happened, that it's right in the
+sevening?"
+
+"Yes, sir."
+
+"We must have stopped it in the room."
+
+"No, sir. Great Scott! You've got it."
+```
+```
+Aunt Agatha had ready to say that he would look after
+married the subject of the distance.
+
+'Mrs Pendlebury is in my advice, sir.'
+
+'Indeed, sir?'
 ...
-"Carry on."
+'And what is the nephew of Tootles?'
+
+'Yes, sir.'
 ```
 
-The model has learned Wodehouse's register ("What ho!", "by Jove", "bally", "chappie", "I mean"), the cast (Jeeves, Aunt Agatha, Bingo, Glossop, Freddie), and the rhythm of a Bertie/Jeeves exchange ("Sir?" / "Very good, sir."). It hasn't learned to stay coherent across a sentence, which is expected at 5M parameters and 0.6M training tokens.
+The model has learned Wodehouse's register ("Great Scott!", "I fancy", "Indeed, sir?", "Nevertheless, I suppose"; the Llama-preset samples add "by Jove", "bally" and "chappie"), the cast (Jeeves, Aunt Agatha, Mr. Little, Corcoran, Eustace, Mrs Pendlebury), and the rhythm of a Bertie/Jeeves exchange. It even switches between the double-quoted dialogue of the earlier books and the single quotes of *Carry On, Jeeves*. It hasn't learned to stay coherent across a sentence, which is expected at 5M parameters and 0.6M training tokens.
 
 **Data:** *My Man Jeeves* (1919), *The Inimitable Jeeves* (1923), *Carry On, Jeeves* (1925) and *Very Good, Jeeves* (1930), all public domain in the USA, from Project Gutenberg. `prepare_data.py --corpus jeeves` downloads them and cuts each book at pinned story boundaries, so title pages, publisher ads and transcriber notes are dropped. It also normalizes typographic quotes and dashes. The text is not committed to this repo. The validation set is the last 10% of the corpus, which is the closing stories of *Very Good, Jeeves*, so the model has never seen those stories.
 
-![Jeeves training curve](assets/jeeves_loss_curve.png)
+![Jeeves training curves](assets/jeeves_loss_curve.png)
+
+The full Llama preset (right) reaches its best validation loss at iteration 1400 and then drifts up. GPT-2 + RoPE (left) is still improving slowly at iteration 2000 (best checkpoint at 1600) and ends with a smaller train/val gap. This is the same pattern as the Shakespeare ablation.
 
 ## Architecture
 
@@ -106,7 +116,7 @@ Induction heads are attention heads that let a transformer copy from its context
 
 ![induction heads](assets/induction_heads.png)
 
-Results for the Jeeves model (from [`runs/jeeves_interpretability.json`](runs/jeeves_interpretability.json)):
+Results for the Llama-preset Jeeves model, the one trained with snapshots (from [`runs/jeeves_interpretability.json`](runs/jeeves_interpretability.json)):
 
 | measurement | value |
 |---|---|
@@ -125,7 +135,7 @@ One methodology note: random tokens are drawn only from tokens that occur at lea
 
 ## KV cache speedup
 
-Measured with `bench_generate.py` on the Jeeves model: batch size 1, top-k sampling, the mean of 3 runs after a warm-up.
+Measured with `bench_generate.py` on the Llama-preset Jeeves model: batch size 1, top-k sampling, the mean of 3 runs after a warm-up.
 
 | device | tokens generated | no cache | KV cache | speedup |
 |---|---|---|---|---|
@@ -153,7 +163,7 @@ What the numbers say. The seed-to-seed std is about 0.01, so the standard error 
 - **RoPE alone gives the whole gain:** −0.113 nats/token, about 11 standard errors, with every seed better than every baseline seed. A small model with 256-token contexts gets a lot from relative-position attention built into q·k, compared with learning 256 absolute position vectors from 0.5M tokens.
 - **RMSNorm + SwiGLU alone doesn't help at this scale.** The +0.015 is about 1.6 standard errors, so it's within noise.
 - **Adding them on top of RoPE gives back about half the gain** (2.736 vs 2.681, about 5 standard errors). The curves show why: the full Llama variant learns fastest (it has the lowest validation loss until about iteration 600), then plateaus and starts to overfit, with its best checkpoint earliest (iteration 1200). The RoPE-only variant keeps improving to the end. On a dataset this small, the extra components speed up fitting and overfitting alike.
-- **Caveats:** this is one small dataset and a 1500-step budget. The hyperparameters (learning rate 1e-3, dropout 0.25) were tuned on the GPT-2 baseline, and the Llama preset also drops biases. Llama-style components are designed for much larger scales, so this result says "not at 5M parameters and 0.5M tokens", not "never". The Jeeves model above uses the full Llama preset; based on this table, `--arch gpt2 --pos_emb rope` is the stronger choice at this scale.
+- **Caveats:** this is one small dataset and a 1500-step budget. The hyperparameters (learning rate 1e-3, dropout 0.25) were tuned on the GPT-2 baseline, and the Llama preset also drops biases. Llama-style components are designed for much larger scales, so this result says "not at 5M parameters and 0.5M tokens", not "never". Following this table, the headline Jeeves model was retrained as `--arch gpt2 --pos_emb rope`. That improved full-split validation loss on Jeeves from 2.556 to 2.515 (single seed each).
 
 ```bash
 python ablate.py --seeds 1 2 3     # writes runs/ablation/summary.{json,md} and assets/ablation.png
@@ -187,9 +197,12 @@ pip install -r requirements.txt                       # for CUDA, install torch 
 python -m pytest                                      # 34 tests, about 6 s on CPU
 
 python prepare_data.py --corpus jeeves                # or --corpus shakespeare (default)
-python train.py --data_dir data/jeeves --out_dir out/jeeves --max_iters 2000 --save_every 100
-python evaluate.py --ckpt out/jeeves/ckpt.pt --data_dir data/jeeves
-python sample.py --ckpt out/jeeves/ckpt.pt --tokenizer data/jeeves/tokenizer.json --prompt "What ho!"
+python train.py --data_dir data/jeeves --out_dir out/jeeves_rope --arch gpt2 --pos_emb rope --max_iters 2000
+python evaluate.py --ckpt out/jeeves_rope/ckpt.pt --data_dir data/jeeves
+python sample.py --ckpt out/jeeves_rope/ckpt.pt --tokenizer data/jeeves/tokenizer.json --prompt "What ho!"
+
+# Llama-preset model with snapshots, used for the interpretability analysis
+python train.py --data_dir data/jeeves --out_dir out/jeeves --arch llama --max_iters 2000 --save_every 100
 
 python interpret.py --ckpt out/jeeves/ckpt.pt --data_dir data/jeeves \
     --snapshots out/jeeves/snapshots --history out/jeeves/history.json

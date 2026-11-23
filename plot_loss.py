@@ -24,6 +24,8 @@ def main() -> None:
     ap.add_argument("--history", default="out/history.json")
     ap.add_argument("--compare", default=None, help="optional second run (e.g. the overfitting run)")
     ap.add_argument("--out", default="assets/loss_curve.png")
+    ap.add_argument("--left_title", default=None, help="default: 'Final run: N iters, cosine LR'")
+    ap.add_argument("--right_title", default=None, help="default: 'Earlier run: N iters (overfits)'")
     ap.add_argument("--title", default="tiny-llm-from-scratch: TinyShakespeare, byte-level BPE (vocab 512), 4.9M params")
     a = ap.parse_args()
 
@@ -36,7 +38,7 @@ def main() -> None:
     ax.plot([p["iter"] for p in tc], [p["loss"] for p in tc], color="#9aa5b1", lw=1, label="train (single batch)")
     ax.plot([e["iter"] for e in ev], [e["train"] for e in ev], "o-", color="#2563eb", ms=3, label="train (eval avg)")
     ax.plot([e["iter"] for e in ev], [e["val"] for e in ev], "o-", color="#dc2626", ms=3, label="val (eval avg)")
-    ax.set_title(f"Final run: {h['config']['max_iters']} iters, cosine LR")
+    ax.set_title(a.left_title or f"Final run: {h['config']['max_iters']} iters, cosine LR")
     ax.set_xlabel("iteration")
     ax.set_ylabel("cross-entropy (nats / BPE token)")
     ax.grid(alpha=0.3)
@@ -52,7 +54,7 @@ def main() -> None:
         ax.axvline(best["iter"], color="#6b7280", ls="--", lw=1)
         ax.annotate(f"best val {best['val']:.2f} @ {best['iter']}", (best["iter"], best["val"]),
                     xytext=(10, 25), textcoords="offset points", fontsize=8)
-        ax.set_title(f"Earlier run: {c['config']['max_iters']} iters (overfits)")
+        ax.set_title(a.right_title or f"Earlier run: {c['config']['max_iters']} iters (overfits)")
         ax.set_xlabel("iteration")
         ax.grid(alpha=0.3)
         ax.legend(frameon=False)
