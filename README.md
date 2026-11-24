@@ -12,11 +12,11 @@ It trains on a laptop GPU in about 4 minutes. Two corpora are supported:
 | TinyShakespeare (1.1M chars) | GPT-2-style, 4.94M params | 16.58 | 2.16 | 4.6 min |
 <!-- END:headline -->
 
-Every number in this README is measured. Raw logs, histories and evaluation JSON are in [`runs/`](runs/), and every results table is generated from those files by [`make_report.py`](make_report.py). A test fails if a table drifts from the data. Compare rows only within the same corpus. The headline Jeeves model uses GPT-2 + RoPE because that combination won the [architecture ablation](#architecture-ablation-gpt-2--llama-one-switch-at-a-time) below. Retrained on Jeeves, it also beats the full Llama preset there (single seed each, 2000 iterations).
+Numbers come from real runs. Best checkpoints were selected on the same validation split that is reported (there is no separate test split), so scores are slightly optimistic. Perplexity is per BPE token. Raw logs, histories and evaluation JSON are in [`runs/`](runs/), and every results table is generated from those files by [`make_report.py`](make_report.py). A test fails if a table drifts from the data. Compare rows only within the same corpus. The headline Jeeves model uses GPT-2 + RoPE because that combination won the [architecture ablation](#architecture-ablation-gpt-2--llama) below. Retrained on Jeeves, it also beats the full Llama preset there (single seed each, 2000 iterations).
 
 ## It talks like Bertie Wooster
 
-Real output from the GPT-2 + RoPE model via `sample.py` (temperature 0.8, top-k 40, seeds 1–4, not cherry-picked). All four samples are in [`runs/jeeves_gpt2rope_samples.txt`](runs/jeeves_gpt2rope_samples.txt), and the Llama-preset model's samples are in [`runs/jeeves_samples.txt`](runs/jeeves_samples.txt).
+Real output from the GPT-2 + RoPE model via `sample.py` (temperature 0.8, top-k 40, seeds 1–4, one sample per prompt). The excerpts below are selected and shortened; all four samples as generated are in [`runs/jeeves_gpt2rope_samples.txt`](runs/jeeves_gpt2rope_samples.txt), and the Llama-preset model's samples are in [`runs/jeeves_samples.txt`](runs/jeeves_samples.txt).
 
 ```
 "Very good, sir."
@@ -65,7 +65,7 @@ The model has learned Wodehouse's register ("Great Scott!", "I fancy", "Indeed, 
 
 ![Jeeves training curves](assets/jeeves_loss_curve.png)
 
-The full Llama preset (right) reaches its best validation loss at iteration 1400 and then drifts up. GPT-2 + RoPE (left) is still improving slowly at iteration 2000 (best checkpoint at 1600) and ends with a smaller train/val gap. This is the same pattern as the Shakespeare ablation.
+The full Llama preset (right) reaches its best validation loss at iteration 1400 and then drifts up. GPT-2 + RoPE (left) is best at iteration 1600, is flat after about 1400, and ends with a smaller train/val gap. Both overfit. One seed each.
 
 ## Architecture
 
@@ -131,9 +131,9 @@ Results for the Llama-preset Jeeves model, the one trained with snapshots (from 
 | val loss: clean / top-3 heads off / 3 random heads off | 2.556 / 2.558 / 2.564 |
 <!-- END:interpretability -->
 
-So **half of the induction circuit forms and half doesn't.** Previous-token heads appear within the first 200 steps, mainly in layers 4 and 5. The second step, attending to "the token after my earlier occurrence", never appears within this budget of about 33M training tokens. The causal test agrees: switching off the highest-scoring candidate heads hurts no more than switching off random heads. That fits the published finding that induction heads form in a later phase change than this run reaches.
+**Previous-token heads form; no induction heads were detected.** Previous-token heads appear within the first 200 steps, and are strongest in layers 4 and 5 (zero-indexed) of the best checkpoint. The induction pattern, attending to "the token after my earlier occurrence", never appears within this budget of about 33M training tokens. The ablation says little here: the "top" candidates score at chance, so switching them off is close to switching off random heads, and no difference is expected. The evidence for the null result is the scores plus the missing loss drop on repeated text. This is one model and one seed. Random-token loss (11–12 nats) is also far above uniform (5.7), so that probe is out of distribution; the natural-text probe is the fairer one.
 
-The loss on random tokens *rises* during training (6.3 → 12.4). The model becomes more confident about real English, so random token strings look increasingly surprising to it.
+The loss on random tokens *rises* during training (6.3 → 12.4). A likely reason is growing confidence about real English; I did not test this.
 
 One methodology note: random tokens are drawn only from tokens that occur at least 100 times in the training data. An earlier version sampled from the whole vocabulary, which included byte tokens never seen in training, and the model's loss on those was about 15 nats. That measured unfamiliar input, not copying.
 
@@ -150,9 +150,9 @@ Measured with `bench_generate.py` on the Llama-preset Jeeves model: batch size 1
 | GPU (RTX 5050 laptop) | 1000 | 92.6 tok/s | 105.3 tok/s | 1.1× |
 <!-- END:kv_cache -->
 
-Without a cache, each new token re-runs the model over the whole context, so the cost per token grows as the context fills. With the cache, the cost per token stays flat. On the GPU the gain is small because at batch size 1 a 5M-parameter model is limited by per-step overhead, not by computation. That's why the CPU with a cache beats the GPU here.
+Without a cache, each new token re-runs the model over the whole context, so the cost per token grows as the context fills. With the cache, the cost per token stays flat. The GPU gain is small, and the CPU with a cache beats the GPU here. Per-step launch overhead at batch size 1 is a likely cause, but I did not profile it.
 
-## Architecture ablation (GPT-2 → Llama, one switch at a time)
+## Architecture ablation (GPT-2 → Llama)
 
 `ablate.py` trains four variants on TinyShakespeare with three seeds each, using identical data, tokenizer, model size, optimizer and 1500-step budget. It scores each best checkpoint on the full validation split. That's 12 runs, about 30 minutes on the laptop GPU.
 
@@ -168,10 +168,10 @@ Without a cache, each new token re-runs the model over the whole context, so the
 ![ablation](assets/ablation.png)
 
 What the numbers say. The seed-to-seed std is about 0.01, so the standard error of a difference between two means is about 0.01.
-- **RoPE alone gives the whole gain:** −0.113 nats/token, about 11 standard errors, with every seed better than every baseline seed. A small model with 256-token contexts gets a lot from relative-position attention built into q·k, compared with learning 256 absolute position vectors from 0.5M tokens.
-- **RMSNorm + SwiGLU alone doesn't help at this scale.** The +0.015 is about 1.6 standard errors, so it's within noise.
-- **Adding them on top of RoPE gives back about half the gain** (2.736 vs 2.681, about 5 standard errors). The curves show why: the full Llama variant learns fastest (it has the lowest validation loss until about iteration 600), then plateaus and starts to overfit, with its best checkpoint earliest (iteration 1200). The RoPE-only variant keeps improving to the end. On a dataset this small, the extra components speed up fitting and overfitting alike.
-- **Caveats:** this is one small dataset and a 1500-step budget. The hyperparameters (learning rate 1e-3, dropout 0.25) were tuned on the GPT-2 baseline, and the Llama preset also drops biases. Llama-style components are designed for much larger scales, so this result says "not at 5M parameters and 0.5M tokens", not "never". Following this table, the headline Jeeves model was retrained as `--arch gpt2 --pos_emb rope`. That improved full-split validation loss on Jeeves from 2.556 to 2.515 (single seed each).
+- **RoPE alone gives the largest gain:** −0.113 nats/token, about 11 standard errors, with every seed better than every baseline seed. A plausible reason is that learning 256 absolute position vectors from 0.5M tokens is hard; this was not tested.
+- **RMSNorm + SwiGLU shows no benefit here.** The +0.015 is about 1.6 standard errors, so it's within noise.
+- **The full Llama preset keeps only about half of RoPE's gain** (2.736 vs 2.681, about 5 standard errors). This preset also removes biases, so the loss can't be attributed to RMSNorm, SwiGLU or the biases individually. The full Llama variant learns fastest (it has the lowest validation loss until about iteration 600), then plateaus, with the earliest best checkpoint (iteration 1200 on average, against 1267 for RoPE-only). Faster overfitting is a plausible explanation, not a tested one.
+- **Caveats:** this is one small dataset and a 1500-step budget. The hyperparameters (learning rate 1e-3, dropout 0.25) were chosen on the GPT-2 baseline, not tuned per variant, and only three seeds were run. Llama-style components are designed for much larger scales, so this result says "not at 5M parameters and 0.5M tokens", not "never". Following this table, the headline Jeeves model was retrained as `--arch gpt2 --pos_emb rope`. That improved full-split validation loss on Jeeves from 2.556 to 2.515 (single seed each).
 
 ```bash
 python ablate.py --seeds 1 2 3     # writes runs/ablation/summary.{json,md} and assets/ablation.png
@@ -195,7 +195,7 @@ I could not have the cold, I must find again.
 
 ![Shakespeare loss curves](assets/loss_curve.png)
 
-An earlier 5000-iteration run (right panel) overfit badly. Validation loss bottomed out at 2.80 around iteration 1250 and then rose to 3.30, while training loss fell to 0.92. Ending the cosine schedule at 1500 iterations reached the same best validation loss in a third of the time.
+An earlier 5000-iteration run (right panel) overfit badly. Validation loss bottomed out at 2.80 around iteration 1250 and then rose to 3.30, while training loss fell to 0.92. Ending the cosine schedule at 1500 iterations reached the same best validation loss in a third of the steps (that run also raised dropout from 0.2 to 0.25).
 
 ## How to run
 
@@ -228,8 +228,8 @@ The defaults are 6 layers, 8 heads, d = 256, a 256-token context, batch size 64,
 ## Tests
 
 The 36 tests in `tests/` run every combination of architecture (gpt2, llama) and attention path (manual, SDPA) where it matters:
-- **Causality:** changing token *t* leaves the logits before *t* exactly unchanged, and the gradient from output *t* to any later input is exactly zero.
-- **KV cache:** prefill plus one-token decode steps gives the same logits as a full forward pass, and cached greedy generation produces exactly the same tokens as uncached generation.
+- **Causality:** changing token *t* leaves the logits before *t* unchanged (within 1e-5), and the gradient from output *t* to any later input is exactly zero.
+- **KV cache:** prefill plus one-token decode steps gives the same logits as a full forward pass (within 1e-5), and cached greedy generation produces exactly the same tokens as uncached generation.
 - **Components:**
   - RoPE scores depend only on relative position, and RoPE preserves vector norms.
   - RMSNorm outputs have unit RMS.
@@ -242,16 +242,15 @@ The 36 tests in `tests/` run every combination of architecture (gpt2, llama) and
   - The initial loss is close to ln(vocab).
   - Weights are tied.
   - Generation past the context length works.
-  - Top-k is respected.
   - The model can overfit a single batch.
 
 ## What I learned
 
-- **Mechanistic claims need controls.** My first induction probe sampled byte tokens the model had never seen, so the loss was about 15 nats and the "scores" were meaningless. A pinned token pool, a natural-text probe and a random-head ablation control turned it into a clean (and honest) negative result: previous-token heads form, induction heads don't yet.
+- **Mechanistic claims need controls.** My first induction probe sampled byte tokens the model had never seen, so the loss was about 15 nats and the "scores" were meaningless. A pinned token pool, a natural-text probe and a random-head control gave a more careful negative result: previous-token heads form, and no induction heads were detected.
 - **Caching has subtle edge cases, so pin them with tests.** `is_causal=True` in SDPA lines the mask up from the top-left corner, which is wrong when a single new query attends over cached keys. The decode step therefore runs unmasked, and the KV-cache equivalence tests (cached logits must equal full-forward logits for every architecture and attention combination) guard against regressions. Separately, a naive initial-loss test failed for the Llama preset. With tied embeddings and no position vector added to the residual stream, an untrained model already predicts "the same token as the input" better than chance. That was a flaw in the test (targets equal to inputs), not in the model.
-- **"Modern" isn't automatically better: measure it.** In a 3-seed ablation, RoPE alone beat the full Llama recipe (−0.113 vs −0.057 nats), because RMSNorm + SwiGLU made the model fit, and then overfit, a 0.5M-token corpus faster. Without seeds and error bars, a single lucky run could have suggested either conclusion.
-- **Watch the overfitting curve.** On 0.5M tokens, training longer made the Shakespeare model worse. Ending the learning-rate schedule near the validation minimum matters more than the number of steps.
-- **Know which resource limits you.** bf16 gave about 2.4× faster training. The KV cache gave 3.7× faster generation on CPU but only about 1.1× on GPU, because tiny models at batch size 1 are limited by per-step overhead.
+- **"Modern" isn't automatically better: measure it.** In a 3-seed ablation, RoPE alone beat the full Llama recipe (−0.113 vs −0.057 nats). Without seeds and error bars, a single lucky run could have suggested either conclusion.
+- **Watch the overfitting curve.** On 0.5M tokens, training longer made the Shakespeare model worse. A shorter schedule with slightly more dropout reached the same best validation loss.
+- **Know which resource limits you.** bf16 gave about 2.4× faster training in one 200-step benchmark. The KV cache gave 3.7× faster generation on CPU but only 1.1–1.6× on GPU.
 
 ## Project layout
 
